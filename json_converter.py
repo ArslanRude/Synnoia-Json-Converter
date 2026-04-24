@@ -468,7 +468,7 @@ def simple_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
             "lineHeight": node.get("lineHeight", 1.5),
             "margin": node.get("margin", {}),
         }
-        segments = node.get("segments", [])
+        segments = node.get("segments") or []
         content_nodes = segments_to_tiptap_content(segments)
         result: dict[str, Any] = {"type": "paragraph", "attrs": attrs}
         if content_nodes:
@@ -477,7 +477,7 @@ def simple_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
 
     # ── Blockquote ──────────────────────────────────────────────────
     if ntype == "blockquote":
-        segments = node.get("segments", [])
+        segments = node.get("segments") or []
         para_attrs = _default_para_attrs(textAlign="start")
         inner_para = _wrap_in_paragraph(segments_to_tiptap_content(segments), para_attrs)
         return {"type": "blockquote", "content": [inner_para]}
@@ -488,7 +488,7 @@ def simple_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
         items_raw = node.get("items", [])
         list_items: list[dict] = []
         for item in items_raw:
-            segs = item.get("segments", [])
+            segs = item.get("segments") or []
             # Each listItem in TipTap wraps paragraph(s)
             # We keep a single paragraph per item (restoring split paragraphs
             # exactly is impossible without original split markers, so one para)
@@ -511,7 +511,7 @@ def simple_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
         items_raw = node.get("items", [])
         list_items = []
         for item in items_raw:
-            segs = item.get("segments", [])
+            segs = item.get("segments") or []
             para_attrs = _default_para_attrs()
             inner = _wrap_in_paragraph(segments_to_tiptap_content(segs), para_attrs)
             list_items.append({
@@ -581,7 +581,7 @@ def simple_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
                     extra_attrs: dict = {}
                 else:
                     cell_text = cell_obj.get("text", "")
-                    segments = cell_obj.get("segments", [])
+                    segments = cell_obj.get("segments") or []
                     extra_attrs = {
                         k: cell_obj.get(k)
                         for k in ("colspan", "rowspan", "align", "background",
@@ -742,7 +742,7 @@ def main() -> None:  # noqa: C901
 
     # ── Execute ──────────────────────────────────────────────────────
     if command == "forward":
-        in_path, out_path = _resolve(extra, "editor-content.json", "output_simple.json")
+        in_path, out_path = _resolve(extra, "editor-content new.json", "output_simple.json")
         print(f"[forward]  {in_path}  →  {out_path}")
         data = load_tiptap(in_path)
         simple = tiptap_to_simple(data)
