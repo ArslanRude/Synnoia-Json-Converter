@@ -34,7 +34,7 @@ def _marks_to_formatting(marks: list[dict]) -> dict:
     fmt: dict[str, Any] = {}
     for mark in marks:
         mtype = mark.get("type", "")
-        attrs = mark.get("attrs", {})
+        attrs = mark.get("attrs") or {}
 
         if mtype == "bold":
             fmt["bold"] = True
@@ -81,8 +81,8 @@ def extract_text_segments(content: list[dict]) -> list[dict]:
         if node.get("type") != "text":
             continue
 
-        text = node.get("text", "")
-        marks = node.get("marks", [])
+        text = node.get("text") or ""
+        marks = node.get("marks") or []
         fmt = _marks_to_formatting(marks)
 
         seg: dict[str, Any] = {"text": text}
@@ -103,8 +103,8 @@ def extract_text_segments(content: list[dict]) -> list[dict]:
 
 
 def parse_heading(node: dict) -> dict:
-    attrs = node.get("attrs", {})
-    content = node.get("content", [])
+    attrs = node.get("attrs") or {}
+    content = node.get("content") or []
 
     segments = extract_text_segments(content)
     # Heading text: join all segments for simplicity; keep segments for fidelity
@@ -112,11 +112,11 @@ def parse_heading(node: dict) -> dict:
 
     fmt: dict[str, Any] = {}
     for s in segments:
-        fmt.update(s.get("formatting", {}))
+        fmt.update(s.get("formatting") or {})
 
     result: dict[str, Any] = {
         "type": "heading",
-        "level": attrs.get("level", 2),
+        "level": attrs.get("level") or 2,
     }
     toc_id = attrs.get("data-toc-id") or attrs.get("id")
     if toc_id:
@@ -136,14 +136,16 @@ def parse_heading(node: dict) -> dict:
 
 
 def parse_paragraph(node: dict) -> dict:
-    attrs = node.get("attrs", {})
-    content = node.get("content", [])
+    attrs = node.get("attrs") or {}
+    content = node.get("content") or []
 
     result: dict[str, Any] = {"type": "paragraph"}
 
     for key, default in [("textAlign", None), ("lineHeight", None),
                           ("indent", None), ("margin", {})]:
-        v = attrs.get(key, default)
+        v = attrs.get(key)
+        if v is None:
+            v = default
         if v is not None and v != {}:
             result[key] = v
 
@@ -155,11 +157,11 @@ def parse_paragraph(node: dict) -> dict:
 
 
 def parse_blockquote(node: dict) -> dict:
-    content = node.get("content", [])
+    content = node.get("content") or []
     segments: list[dict] = []
     for child in content:
         if child.get("type") == "paragraph":
-            segments.extend(extract_text_segments(child.get("content", [])))
+            segments.extend(extract_text_segments(child.get("content") or []))
 
     result: dict[str, Any] = {"type": "blockquote"}
     if segments:
@@ -173,15 +175,15 @@ def _parse_list_item(item: dict) -> list[dict]:
     Returns a flat list of segments (multiple paragraphs → merged).
     """
     segments: list[dict] = []
-    for child in item.get("content", []):
+    for child in item.get("content") or []:
         if child.get("type") == "paragraph":
-            segments.extend(extract_text_segments(child.get("content", [])))
+            segments.extend(extract_text_segments(child.get("content") or []))
     return segments
 
 
 def parse_ordered_list(node: dict) -> dict:
-    attrs = node.get("attrs", {})
-    items_raw = node.get("content", [])
+    attrs = node.get("attrs") or {}
+    items_raw = node.get("content") or []
 
     list_items: list[dict] = []
     for idx, item in enumerate(items_raw, start=1):
@@ -193,7 +195,7 @@ def parse_ordered_list(node: dict) -> dict:
 
     result: dict[str, Any] = {
         "type": "ordered_list",
-        "listType": attrs.get("listType", "decimal"),
+        "listType": attrs.get("listType") or "decimal",
     }
     if list_items:
         result["items"] = list_items
@@ -201,8 +203,8 @@ def parse_ordered_list(node: dict) -> dict:
 
 
 def parse_bullet_list(node: dict) -> dict:
-    attrs = node.get("attrs", {})
-    items_raw = node.get("content", [])
+    attrs = node.get("attrs") or {}
+    items_raw = node.get("content") or []
 
     list_items: list[dict] = []
     for item in items_raw:
@@ -214,7 +216,7 @@ def parse_bullet_list(node: dict) -> dict:
 
     result: dict[str, Any] = {
         "type": "bullet_list",
-        "listType": attrs.get("listType", "disc"),
+        "listType": attrs.get("listType") or "disc",
     }
     if list_items:
         result["items"] = list_items
@@ -222,12 +224,12 @@ def parse_bullet_list(node: dict) -> dict:
 
 
 def parse_task_list(node: dict) -> dict:
-    items_raw = node.get("content", [])
+    items_raw = node.get("content") or []
 
     list_items: list[dict] = []
     for item in items_raw:
-        item_attrs = item.get("attrs", {})
-        checked = item_attrs.get("checked", False)
+        item_attrs = item.get("attrs") or {}
+        checked = item_attrs.get("checked") or False
         segs = _parse_list_item(item)
         # Simple flat text for task items (usually single text node)
         text = "".join(s["text"] for s in segs)
@@ -241,13 +243,13 @@ def parse_task_list(node: dict) -> dict:
 
 
 def parse_code_block(node: dict) -> dict:
-    attrs = node.get("attrs", {})
-    content = node.get("content", [])
-    code = "".join(n.get("text", "") for n in content if n.get("type") == "text")
+    attrs = node.get("attrs") or {}
+    content = node.get("content") or []
+    code = "".join(n.get("text") or "" for n in content if n.get("type") == "text")
 
     result: dict[str, Any] = {
         "type": "code_block",
-        "language": attrs.get("language", "plaintext"),
+        "language": attrs.get("language") or "plaintext",
     }
     theme = attrs.get("theme")
     if theme:
@@ -261,14 +263,14 @@ def parse_code_block(node: dict) -> dict:
 
 def _parse_table_cell(cell: dict) -> dict:
     """Parse a tableHeader or tableCell node into a simple cell dict."""
-    attrs = cell.get("attrs", {})
-    content = cell.get("content", [])
+    attrs = cell.get("attrs") or {}
+    content = cell.get("content") or []
 
     # Gather all text segments from inner paragraphs
     segments: list[dict] = []
     for child in content:
         if child.get("type") == "paragraph":
-            segments.extend(extract_text_segments(child.get("content", [])))
+            segments.extend(extract_text_segments(child.get("content") or []))
 
     simple_text = "".join(s["text"] for s in segments)
 
@@ -280,8 +282,8 @@ def _parse_table_cell(cell: dict) -> dict:
         cell_obj["segments"] = segments
 
     # Preserve span info and styling if non-default
-    colspan = attrs.get("colspan", 1)
-    rowspan = attrs.get("rowspan", 1)
+    colspan = attrs.get("colspan") or 1
+    rowspan = attrs.get("rowspan") or 1
     if colspan and colspan != 1:
         cell_obj["colspan"] = colspan
     if rowspan and rowspan != 1:
@@ -295,11 +297,11 @@ def _parse_table_cell(cell: dict) -> dict:
 
 
 def parse_table(node: dict) -> dict:
-    rows_raw = node.get("content", [])
+    rows_raw = node.get("content") or []
     rows: list[dict] = []
 
     for row_node in rows_raw:
-        cells_raw = row_node.get("content", [])
+        cells_raw = row_node.get("content") or []
         row_type = "header" if any(c.get("type") == "tableHeader" for c in cells_raw) else "body"
         cells = [_parse_table_cell(c) for c in cells_raw]
         rows.append({"row_type": row_type, "cells": cells})
@@ -309,7 +311,7 @@ def parse_table(node: dict) -> dict:
 
 def parse_node(node: dict) -> dict | None:
     """Dispatch a single TipTap node to the right parser."""
-    ntype = node.get("type", "")
+    ntype = node.get("type") or ""
     dispatch = {
         "heading": parse_heading,
         "paragraph": parse_paragraph,
@@ -328,7 +330,7 @@ def parse_node(node: dict) -> dict | None:
 
 def tiptap_to_simple(tiptap_data: dict) -> dict:
     """Convert a full TipTap document dict to Simple JSON."""
-    top_content = tiptap_data.get("content", [])
+    top_content = tiptap_data.get("content") or []
     nodes: list[dict] = []
     for raw_node in top_content:
         parsed = parse_node(raw_node)
@@ -392,8 +394,8 @@ def segments_to_tiptap_content(segments: list[dict]) -> list[dict]:
     """Convert simple ``segments`` list back to TipTap text nodes with marks."""
     nodes: list[dict] = []
     for seg in segments:
-        text = seg.get("text", "")
-        fmt = seg.get("formatting", {})
+        text = seg.get("text") or ""
+        fmt = seg.get("formatting") or {}
         marks = _formatting_to_marks(fmt)
         node: dict[str, Any] = {"type": "text", "text": text}
         if marks:
@@ -432,21 +434,21 @@ def _wrap_in_paragraph(content_nodes: list[dict], para_attrs: dict | None = None
 
 def simple_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
     """Convert a single simple-format node back to TipTap format."""
-    ntype = node.get("type", "")
+    ntype = node.get("type") or ""
 
     # ── Heading ─────────────────────────────────────────────────────
     if ntype == "heading":
-        level = node.get("level", 2)
+        level = node.get("level") or 2
         toc_id = node.get("toc_id") or node.get("id")
-        fmt = node.get("formatting", {})
-        text = node.get("text", "")
+        fmt = node.get("formatting") or {}
+        text = node.get("text") or ""
 
         # Reconstruct attrs
         attrs: dict[str, Any] = {
-            "indent": node.get("indent", None),
-            "textAlign": node.get("textAlign", None),
-            "lineHeight": node.get("lineHeight", "1.375"),
-            "margin": node.get("margin", {}),
+            "indent": node.get("indent"),
+            "textAlign": node.get("textAlign"),
+            "lineHeight": node.get("lineHeight") or "1.375",
+            "margin": node.get("margin") or {},
             "id": toc_id,
             "data-toc-id": toc_id,
             "level": level,
@@ -463,10 +465,10 @@ def simple_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
     # ── Paragraph ───────────────────────────────────────────────────
     if ntype == "paragraph":
         attrs = {
-            "indent": node.get("indent", None),
-            "textAlign": node.get("textAlign", None),
-            "lineHeight": node.get("lineHeight", 1.5),
-            "margin": node.get("margin", {}),
+            "indent": node.get("indent"),
+            "textAlign": node.get("textAlign"),
+            "lineHeight": node.get("lineHeight") or 1.5,
+            "margin": node.get("margin") or {},
         }
         segments = node.get("segments") or []
         content_nodes = segments_to_tiptap_content(segments)
@@ -484,8 +486,8 @@ def simple_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
 
     # ── Ordered list ────────────────────────────────────────────────
     if ntype == "ordered_list":
-        list_type = node.get("listType", "decimal")
-        items_raw = node.get("items", [])
+        list_type = node.get("listType") or "decimal"
+        items_raw = node.get("items") or []
         list_items: list[dict] = []
         for item in items_raw:
             segs = item.get("segments") or []
@@ -507,8 +509,8 @@ def simple_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
 
     # ── Bullet list ─────────────────────────────────────────────────
     if ntype == "bullet_list":
-        list_type = node.get("listType", "disc")
-        items_raw = node.get("items", [])
+        list_type = node.get("listType") or "disc"
+        items_raw = node.get("items") or []
         list_items = []
         for item in items_raw:
             segs = item.get("segments") or []
@@ -527,11 +529,11 @@ def simple_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
 
     # ── Task list ───────────────────────────────────────────────────
     if ntype == "task_list":
-        items_raw = node.get("items", [])
+        items_raw = node.get("items") or []
         task_items: list[dict] = []
         for item in items_raw:
-            checked = item.get("checked", False)
-            text_val = item.get("text", "")
+            checked = item.get("checked") or False
+            text_val = item.get("text") or ""
             inner_para = _wrap_in_paragraph(
                 [{"type": "text", "text": text_val}],
                 _default_para_attrs(textAlign="start"),
@@ -551,11 +553,15 @@ def simple_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
     if ntype == "code_block":
         attrs = {
             "margin": {},
-            "language": node.get("language", "plaintext"),
-            "theme": node.get("theme", "light"),
-            "wordWrap": node.get("wordWrap", True),
+            "language": node.get("language") or "plaintext",
         }
-        code = node.get("code", "")
+        theme = node.get("theme")
+        if theme:
+            attrs["theme"] = theme
+        word_wrap = node.get("wordWrap")
+        if word_wrap is not None:
+            attrs["wordWrap"] = word_wrap
+        code = node.get("code") or ""
         return {
             "type": "codeBlock",
             "attrs": attrs,
@@ -564,13 +570,13 @@ def simple_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
 
     # ── Table ───────────────────────────────────────────────────────
     if ntype == "table":
-        rows_simple = node.get("rows", [])
+        rows_simple = node.get("rows") or []
         tiptap_rows: list[dict] = []
 
         for row in rows_simple:
-            row_type = row.get("row_type", "body")
+            row_type = row.get("row_type") or "body"
             cell_tag = "tableHeader" if row_type == "header" else "tableCell"
-            cells_simple = row.get("cells", [])
+            cells_simple = row.get("cells") or []
             tiptap_cells: list[dict] = []
 
             for cell_obj in cells_simple:
@@ -580,13 +586,13 @@ def simple_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
                     segments: list[dict] = []
                     extra_attrs: dict = {}
                 else:
-                    cell_text = cell_obj.get("text", "")
+                    cell_text = cell_obj.get("text") or ""
                     segments = cell_obj.get("segments") or []
                     extra_attrs = {
                         k: cell_obj.get(k)
                         for k in ("colspan", "rowspan", "align", "background",
                                   "color", "colwidth")
-                        if k in cell_obj
+                        if k in cell_obj and cell_obj.get(k) is not None
                     }
 
                 cell_attrs = _default_cell_attrs(extra_attrs)
@@ -622,7 +628,7 @@ def simple_to_tiptap_node(node: dict) -> dict | None:  # noqa: C901
 
 def simple_to_tiptap(simple_data: dict) -> dict:
     """Convert a full Simple JSON document back to TipTap format."""
-    nodes_simple = simple_data.get("document", {}).get("nodes", [])
+    nodes_simple = simple_data.get("document", {}).get("nodes") or []
     content: list[dict] = []
     for snode in nodes_simple:
         tt = simple_to_tiptap_node(snode)
@@ -648,8 +654,8 @@ def verify_roundtrip(original_path: str, simple_path: str) -> bool:
 
     reconstructed = simple_to_tiptap(simple)
 
-    orig_nodes = original.get("content", [])
-    recon_nodes = reconstructed.get("content", [])
+    orig_nodes = original.get("content") or []
+    recon_nodes = reconstructed.get("content") or []
 
     print(f"  Original nodes : {len(orig_nodes)}")
     print(f"  Reconstructed  : {len(recon_nodes)}")
